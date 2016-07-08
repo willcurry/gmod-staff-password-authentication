@@ -31,6 +31,61 @@ db:Query([[CREATE TABLE IF NOT EXISTS protection(
 	)
 ]])
 
+local function salt()
+	local holder = ""
+	local salt_chars = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
+
+	for i = 1, 16 do
+		local text = salt_chars[math.random(#salt_chars)]
+		holder = holder .. text
+	end
+	return holder
+end
+
+local function getCode(ply, callback)
+	if err then print("[Protection SQL] " .. err) return end
+	if !code or !ply.salt then return end
+
+	local sid = ply:SteamID()
+	db:Query("SELECT Code from protection WHERE SteamID = '"..sid.."'", function(results)
+		local row = results[1].data[1]
+		if row then
+			callback(row.code)
+		else
+			callback(nil)
+		end
+	end)
+end
+
+local function getSalt(ply, callback)
+	if err then print("[Protection SQL] " .. err) return end
+	if ( !IsValid( ply ) ) then return end
+
+	local sid = ply:SteamID()
+	db:Query("SELECT Salt from protection WHERE SteamID = '"..sid.."'", function(results)
+		local row = results[1].data[1]
+		
+		if row then
+			callback(row.salt)
+		else
+			callback(nil)
+		end
+	end)
+end
+
+local function setCode(ply, code)
+	if err then print("[CG SQL] " .. err) return end
+	if !code then return end
+
+	local sid = ply:SteamID()
+	local name = ply:Nick()
+	local salt = salt()
+	local hashedCode = hash.MD5(hash.SHA256(code .. salt))
+	
+	ply:ChatPrint("Code has been saved!")
+	db:Query("REPLACE into protection (`SteamID`, `Code`, `PlayerName`, `Salt`) VALUES('"..sid.."', '"..hashedCode.."', '"..name.."', '"..salt.."');")
+end
+
 hook.Add("PlayerAuthed", "ULXProtection", function(ply)
 	timer.Simple(3, function()
 		ply.rank = ply:GetUserGroup()	
@@ -46,30 +101,6 @@ hook.Add("PlayerAuthed", "ULXProtection", function(ply)
 		end
 	end)
 end)
-
-local function salt()
-	local holder = ""
-	local salt_chars = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
-
-	for i = 1, 16 do
-		local text = salt_chars[math.random(#salt_chars)]
-		holder = holder .. text
-	end
-	return holder
-end
-
-local function setCode(ply, code)
-	if err then print("[CG SQL] " .. err) return end
-	if !code then return end
-
-	local sid = ply:SteamID()
-	local name = ply:Nick()
-	local salt = salt()
-	local hashedCode = hash.MD5(hash.SHA256(code .. salt))
-	
-	ply:ChatPrint("Code has been saved!")
-	db:Query("REPLACE into protection (`SteamID`, `Code`, `PlayerName`, `Salt`) VALUES('"..sid.."', '"..hashedCode.."', '"..name.."', '"..salt.."');")
-end
 
 concommand.Add("adminmode_setcode", function(ply, cmd, args)
 	if !IsValid(ply) then return end
@@ -95,35 +126,4 @@ concommand.Add("adminmode", function(ply, cmd, args)
 			return
 		end
 	end)
-end)
-
-local function getSalt(ply, callback)
-	if err then print("[Protection SQL] " .. err) return end
-	if ( !IsValid( ply ) ) then return end
-
-	local sid = ply:SteamID()
-	db:Query("SELECT Salt from protection WHERE SteamID = '"..sid.."'", function(results)
-		local row = results[1].data[1]
-		
-		if row then
-			callback(row.salt)
-		else
-			callback(nil)
-		end
-	end)
-end
-
-local function getCode(ply, callback)
-	if err then print("[Protection SQL] " .. err) return end
-	if !code or !ply.salt then return end
-
-	local sid = ply:SteamID()
-	db:Query("SELECT Code from protection WHERE SteamID = '"..sid.."'", function(results)
-		local row = results[1].data[1]
-		if row then
-			callback(row.code)
-		else
-			callback(nil)
-		end
-	end)
-end
+end) 
