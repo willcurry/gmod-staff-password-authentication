@@ -1,9 +1,6 @@
 require('hash')
 require('tmysql4')
 
-util.AddNetworkString("28988957987353255")
-util.AddNetworkString("592385876")
-
 -- Ranks that require authentication.
 local ranks = {
 	["admin"] = true,
@@ -34,6 +31,22 @@ db:Query([[CREATE TABLE IF NOT EXISTS protection(
 	)
 ]])
 
+hook.Add("PlayerAuthed", "ULXProtection", function(ply)
+	timer.Simple(3, function()
+		ply.rank = ply:GetUserGroup()	
+		if ranks[ply:GetUserGroup()] then
+			getSalt(ply, function(salt)
+				if !salt then
+					ply:ChatPrint("You must set a code!")
+				else
+					ply.salt = salt
+				end
+			end)
+			ply:SetUserGroup("user")
+		end
+	end)
+end)
+
 local function salt()
 	local holder = ""
 	local salt_chars = {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"};
@@ -42,7 +55,6 @@ local function salt()
 		local text = salt_chars[math.random(#salt_chars)]
 		holder = holder .. text
 	end
-
 	return holder
 end
 
@@ -59,12 +71,30 @@ local function setCode(ply, code)
 	db:Query("REPLACE into protection (`SteamID`, `Code`, `PlayerName`, `Salt`) VALUES('"..sid.."', '"..hashedCode.."', '"..name.."', '"..salt.."');")
 end
 
-concommand.Add("set_code", function(ply, cmd, args)
+concommand.Add("adminmode_setcode", function(ply, cmd, args)
 	if !IsValid(ply) then return end
 	if !ranks[ply.rank] then return end
 	if ply.salt then return end
 
 	setCode(ply, args[1])
+end)
+
+concommand.Add("adminmode", function(ply, cmd, args)
+	if !IsValid(ply) then return end
+	if !ranks[ply.rank] then return end
+	if !ply.salt then return end
+	if !args[1] then return end
+
+	getCode(ply, function(hashCode)
+		if hash.MD5(hash.SHA256(args[1] .. ply.salt)) == hashCode then
+			ply:SetUserGroup(ply.rank)
+			ply.salt = nil
+			return
+		else
+			ply:Kick("Wrong code")
+			return
+		end
+	end)
 end)
 
 local function getSalt(ply, callback)
@@ -83,7 +113,7 @@ local function getSalt(ply, callback)
 	end)
 end
 
-local function getCode(ply, code, callback)
+local function getCode(ply, callback)
 	if err then print("[Protection SQL] " .. err) return end
 	if !code or !ply.salt then return end
 
@@ -97,37 +127,3 @@ local function getCode(ply, code, callback)
 		end
 	end)
 end
-
-hook.Add("PlayerAuthed", "ULXProtection", function(ply)
-	timer.Simple(3, function()
-		ply.rank = ply:GetUserGroup()	
-		if ranks[ply:GetUserGroup()] then
-			getSalt(ply, function(salt)
-				if !salt then
-					ply:ChatPrint("You must set a code!")
-				else
-					net.Start("28988957987353255")
-					net.Send(ply)
-					ply.salt = salt
-				end
-			end)
-			ply:SetUserGroup("user")
-		end
-	end)
-end)
-
-local function checkCode(l, ply)
-	if !IsValid(ply) then return end
-	
-	local code = net.ReadString()
-	getCode(ply, code, function(hashCode)
-		if hash.MD5(hash.SHA256(code .. ply.salt)) == hashCode then
-			ply:SetUserGroup(ply.rank)
-			ply.salt = nil
-		else
-			ply:Kick("Wrong code")
-			return
-		end
-	end)
-end
-net.Receive("592385876", checkCode)
